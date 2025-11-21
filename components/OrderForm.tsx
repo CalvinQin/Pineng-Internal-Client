@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Order, OrderItem, OrderStatus, Product } from '../types';
 import { parseAddressWithAI } from '../services/geminiService';
@@ -92,7 +91,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, userId, initialOrder, o
         country: result.country || prev.country
       }));
     } catch (e) {
-      alert("AI 解析失败，请手动输入。");
+      alert("解析失败，请手动输入。");
     } finally {
       setIsParsing(false);
     }
@@ -332,7 +331,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, userId, initialOrder, o
           <div className="flex justify-between items-center mb-2 relative z-10">
             <label className="block text-sm font-bold text-blue-800 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-              AI 智能地址识别
+              智能地址识别 (本地)
             </label>
             <button
               type="button"
@@ -346,7 +345,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, userId, initialOrder, o
             </button>
           </div>
           <textarea
-            placeholder="在此粘贴客户发来的杂乱地址信息，AI将自动提取收件人、电话、地址..."
+            placeholder="在此粘贴客户发来的杂乱地址信息，系统将自动提取收件人、电话、地址..."
             value={rawAddress}
             onChange={(e) => setRawAddress(e.target.value)}
             className="w-full text-sm border border-blue-200 rounded-md p-3 focus:ring-2 focus:ring-blue-300 outline-none h-24 bg-white/80 relative z-10"

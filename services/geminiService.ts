@@ -1,96 +1,120 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { AddressParseResult, ProductParseResult } from "../types";
+import { COUNTRIES } from "../constants";
 
-const getAI = () => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key not found");
+// Helper to find country in text
+const findCountry = (text: string): string => {
+  for (const country of COUNTRIES) {
+    if (text.includes(country)) return country;
   }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
-}
-
-export const parseAddressWithAI = async (rawText: string): Promise<AddressParseResult> => {
-  const ai = getAI();
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `你是一个专业的外贸地址解析助手。请从以下的原始文本中提取收件人姓名、电话号码、完整收货地址和国家。
-      
-      注意：
-      1. 文本可能包含中文、英文或混合内容，以及很多杂乱的物流标记。
-      2. 如果国家没有明确写出，请根据城市或地址上下文推断（例如 'Guangzhou' -> '中国', 'Lome' -> '多哥'）。
-      3. 保持地址的完整性。
-
-      原始文本:
-      "${rawText}"`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            recipientName: { type: Type.STRING },
-            recipientPhone: { type: Type.STRING },
-            recipientAddress: { type: Type.STRING },
-            country: { type: Type.STRING },
-          },
-          required: ["recipientName", "recipientAddress", "country"],
-        },
-      },
-    });
-
-    const jsonText = response.text;
-    if (!jsonText) throw new Error("No response from AI");
-
-    return JSON.parse(jsonText) as AddressParseResult;
-
-  } catch (error) {
-    console.error("Gemini Parse Error:", error);
-    return {
-      recipientName: "",
-      recipientPhone: "",
-      recipientAddress: rawText.substring(0, 50),
-      country: "",
-    };
-  }
+  // Basic mapping fallback
+  if (text.match(/Guangzhou|Foshan|China/i)) return "中国";
+  if (text.match(/Lome|Togo/i)) return "多哥";
+  if (text.match(/Zambia|Lusaka/i)) return "赞比亚";
+  if (text.match(/Benin|Cotonou/i)) return "贝宁";
+  if (text.match(/Nigeria|Lagos/i)) return "尼日利亚";
+  return "";
 };
 
-export const parseProductInfoWithAI = async (rawText: string): Promise<Partial<ProductParseResult>> => {
-  const ai = getAI();
+/**
+ * Local Regex-based Address Parser
+ * Replaces Google AI for China accessibility
+ */
+export const parseAddressWithAI = async (rawText: string): Promise<AddressParseResult> => {
+  // Simulate async delay for UI consistency
+  await new Promise(resolve => setTimeout(resolve, 300));
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `你是一个外贸产品数据助手。请从以下杂乱的文本中提取产品规格信息。
-      你需要提取：产品型号、名称、产品尺寸、建议单价(如果没有则为0)、装箱数(每箱多少个)、外箱尺寸(长x宽x高cm)、整箱毛重(kg)。
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
+  
+  let recipientName = "";
+  let recipientPhone = "";
+  let country = findCountry(rawText);
+  let addressParts: string[] = [];
 
-      原始文本:
-      "${rawText}"`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            model: { type: Type.STRING, description: "型号" },
-            name: { type: Type.STRING, description: "产品名称" },
-            size: { type: Type.STRING, description: "产品本身尺寸" },
-            price: { type: Type.NUMBER, description: "单价" },
-            qtyPerCarton: { type: Type.NUMBER, description: "每箱数量 (pcs/ctn)" },
-            cartonSize: { type: Type.STRING, description: "外箱尺寸 (e.g. 60x40x30cm)" },
-            grossWeight: { type: Type.NUMBER, description: "整箱重量 (kg)" },
-            description: { type: Type.STRING, description: "包含的配件或描述" },
-          },
-          required: ["model", "qtyPerCarton"],
-        },
-      },
-    });
-
-    const jsonText = response.text;
-    if (!jsonText) throw new Error("No response from AI");
-
-    return JSON.parse(jsonText) as Partial<ProductParseResult>;
-
-  } catch (error) {
-    console.error("Gemini Product Parse Error:", error);
-    return {};
+  // Regex for phone detection (supports various formats)
+  const phoneRegex = /(?:(?:\+|00)86)?1[3-9]\d{9}|(?:\+|00)\d{1,3}[\s-]?\d{6,}/g;
+  
+  const phoneMatch = rawText.match(phoneRegex);
+  if (phoneMatch && phoneMatch.length > 0) {
+    recipientPhone = phoneMatch[0];
   }
+
+  // Simple heuristic for parsing
+  // Assuming: Name is often short, Address is long
+  for (const line of lines) {
+    // If line is the phone number, skip adding to address
+    if (line.includes(recipientPhone) && recipientPhone) continue;
+
+    // Try to identify name (short line, no numbers usually)
+    if (!recipientName && line.length < 20 && !line.match(/\d{5,}/)) {
+        // check for keywords
+        if (line.toLowerCase().startsWith("name:") || line.toLowerCase().startsWith("收件人")) {
+            recipientName = line.replace(/name:|收件人[:：]/i, "").trim();
+        } else {
+            recipientName = line;
+        }
+        continue;
+    }
+    
+    // Detect Country line
+    if (COUNTRIES.includes(line.trim())) {
+        country = line.trim();
+        continue;
+    }
+
+    addressParts.push(line);
+  }
+
+  return {
+    recipientName: recipientName,
+    recipientPhone: recipientPhone,
+    recipientAddress: addressParts.join(", "),
+    country: country,
+  };
+};
+
+/**
+ * Local Regex-based Product Parser
+ * Replaces Google AI for China accessibility
+ */
+export const parseProductInfoWithAI = async (rawText: string): Promise<Partial<ProductParseResult>> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  const result: Partial<ProductParseResult> = {};
+
+  // 1. Extract Price ($XX.XX or XX.XX USD)
+  const priceMatch = rawText.match(/(?:\$|USD|￥)\s?(\d+(\.\d+)?)/i);
+  if (priceMatch) {
+      result.price = parseFloat(priceMatch[1]);
+  }
+
+  // 2. Extract Dimensions (60x40x30 or 60*40*30)
+  // Look for pattern like number x number x number
+  const dimMatch = rawText.match(/(\d+(\.\d+)?)\s*[xX\*]\s*(\d+(\.\d+)?)\s*[xX\*]\s*(\d+(\.\d+)?)(cm|mm)?/i);
+  if (dimMatch) {
+      // Assuming the matched string is the carton size
+      result.cartonSize = dimMatch[0]; 
+      // If it looks small, maybe product size? But usually this format in trade chat is carton size.
+  }
+
+  // 3. Extract Weight (XX kg)
+  const weightMatch = rawText.match(/(\d+(\.\d+)?)\s*(kg|KG|Kg)/);
+  if (weightMatch) {
+      result.grossWeight = parseFloat(weightMatch[1]);
+  }
+
+  // 4. Extract Qty per Carton (XX pcs/ctn or XX/箱)
+  const qtyMatch = rawText.match(/(\d+)\s*(pcs|ctn|箱|个)/i);
+  if (qtyMatch) {
+      result.qtyPerCarton = parseInt(qtyMatch[1]);
+  }
+
+  // 5. Extract Model (Model: XXX or just vague guess)
+  const modelMatch = rawText.match(/(?:Model|型号)[:：]\s*([a-zA-Z0-9\-\s]+)/i);
+  if (modelMatch) {
+      result.model = modelMatch[1].trim();
+  }
+
+  result.description = rawText.substring(0, 100); // Keep first part as description
+
+  return result;
 };

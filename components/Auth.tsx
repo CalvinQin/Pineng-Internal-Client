@@ -113,7 +113,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </div>
               {role === 'SALES' && (
                  <div className="mt-2 flex items-center justify-center gap-2 text-xs text-slate-400">
-                    <button type="button" onClick={() => setRole('BOSS')} className={`hover:text-blue-600 ${role === 'BOSS' ? 'text-blue-600 font-bold' : ''}`}>
+                    <button type="button" onClick={() => setRole('BOSS')} className="hover:text-blue-600">
                         我是老板? (Switch to Boss)
                     </button>
                  </div>
