@@ -1,0 +1,7 @@
+{
+  "name": "TradeFlow AI",
+  "description": "A specialized ERP system for international trade teams. Features role-based views for Sales, Packers, and Managers, replacing traditional Excel sheets with a modern, AI-enhanced workflow.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
